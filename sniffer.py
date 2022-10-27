@@ -6,6 +6,12 @@ from scapy.layers import http
 
 import argparse
 
+# Sniff Host -------------------------
+
+def sniff_host(ip):
+    scapy.sniff (filter=f'host {ip}', store=0, prn=lambda packet: print(packet.summary()))
+
+
 # Sniff HTTP -------------------------
 
 def sniff_http():
@@ -38,4 +44,4 @@ def sniffed_http_packet(packet):
 # Main -------------------------
 
 if __name__ == '__main__':
-    sniff_http()
+    sniff_host( '192.168.1.42' )

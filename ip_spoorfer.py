@@ -22,9 +22,9 @@ def run_spoofer(target_ip, gateway):
     try:
         spinner = Spin(f'Spoofing [MAC: {target_mac} IP: {target_ip}]')
         spinner.spin_thread.start()
-        while True:
+        while True:         
             spoofing(target_ip, target_mac, gateway)
-            spoofing(gateway, gateway_mac, target_ip)
+            spoofing(gateway, gateway_mac, target_ip)          
             time.sleep(1)
 
     except KeyboardInterrupt:
